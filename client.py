@@ -5,21 +5,47 @@ import time
 import socket
 import struct
 
-class Bullet:
-    def __init__(self, x, y, angle):
+MAX_PLAYERS = 3
+MAX_BULLETS = 5
+
+class Point:
+    def __init__(self, x, y):
         self.x = x
         self.y = y
+
+class Tank:
+    def __init__(self, position, turnover_deg, bullets, colour, is_alive):
+        self.position = position
+        self.turnover_deg = turnover_deg
+        self.bullets = bullets
+        self.colour = colour
+        self.is_alive = is_alive
+
+class Bullet:
+    def __init__(self, position, angle, is_alive):
+        self.position = position
         self.angle = angle
-        self.speed = 10
+        self.is_alive = is_alive
         self.radius = 5
 
-    def move(self):
-        self.x += self.speed * math.cos(math.radians(self.angle))
-        self.y -= self.speed * math.sin(math.radians(self.angle))
-
     def draw(self, screen):
-        pygame.draw.circle(screen, (43,43,43), (int(self.x), int(self.y)), self.radius)
+        pygame.draw.circle(screen, (43, 43, 43), (int(self.position.x), int(self.position.y)), self.radius)
 
+
+def recv_tanks(client_sock):
+    tanks_data = client_sock.recv(MAX_PLAYERS * struct.calcsize('2f i c h 2f h i 2f h i 2f h i'))
+    tanks = []
+    for i in range(MAX_PLAYERS):
+        offset = i * struct.calcsize('2f i c h 2f h i 2f h i 2f h i')
+        data = tanks_data[offset:offset + struct.calcsize('2f i c h 2f h i 2f h i 2f h i')]
+        position_x, position_y, turnover_deg, colour, is_alive, *bullets = struct.unpack('2f i c h 2f h i 2f h i 2f h i', data)
+        if is_alive == 1:
+            position = Point(position_x, position_y)
+            bullet_positions = [Point(0,0) for i in range(MAX_BULLETS)]
+            #bullet_positions = [Point(bullets[i*2], bullets[i*2+1]) for i in range(MAX_BULLETS)]
+            tank = Tank(position, turnover_deg, bullet_positions, colour.decode('utf-8'), is_alive)
+            tanks.append(tank)
+    return tanks
 
 
 def main():
@@ -41,15 +67,15 @@ def main():
     gradient_color = (0, 17, 48)
     gradient_factor = 1.1
 
-    background_image = pygame.image.load('background.png')
+    background_image = pygame.image.load('game_logic/background.png')
     background_image = pygame.transform.scale(background_image, (screen_width, screen_height))
-    tankImage = pygame.image.load('tank_pink.png')
-    logoImage = pygame.image.load('logo.png')
-    tankGreenImage = pygame.image.load("tank_green.png")
-    tankBlueImage = pygame.image.load("tank_blue.png")
-    tankRedImage = pygame.image.load("tank_red.png")
-    tankPinkImage = pygame.image.load("tank_pink.png")
-    tankYellowImage = pygame.image.load("tank_yellow.png")
+    tankImage = pygame.image.load('game_logic/tank_pink.png')
+    logoImage = pygame.image.load('game_logic/logo.png')
+    tankGreenImage = pygame.image.load("game_logic/tank_green.png")
+    tankBlueImage = pygame.image.load("game_logic/tank_blue.png")
+    tankRedImage = pygame.image.load("game_logic/tank_red.png")
+    tankPinkImage = pygame.image.load("game_logic/tank_pink.png")
+    tankYellowImage = pygame.image.load("game_logic/tank_yellow.png")
 
     tankImage = pygame.transform.scale(tankImage, (tank_width, tank_height))
     image_rect = tankImage.get_rect(center=(screen_width // 2, screen_height // 2))
@@ -92,11 +118,6 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
 
-            #if event.type == pygame.KEYDOWN and start:
-            #   if event.key == pygame.K_SPACE:
-            #        bullet_x = image_rect.centerx + (image_rect.width // 2) * math.cos(math.radians(rect_angle))
-            #        bullet_y = image_rect.centery - (image_rect.height // 2) * math.sin(math.radians(rect_angle))
-            #        bullets.append(Bullet(bullet_x, bullet_y, rect_angle))
             if not start:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_RETURN:
@@ -106,8 +127,7 @@ def main():
                         start = True
                         start_time = time.time()
                         try:
-                            client_socket.send(color.encode('utf-8'))
-                            data = socket.recv(8)
+                            client_socket.send(picked_colour.encode('utf-8'))
                         except socket.error as e:
                             print(e)
 
@@ -130,41 +150,44 @@ def main():
             screen.blit(curr_pick, tangGreen_rect.topleft)
 
         else:
+            screen.blit(background_image, (0, 0))
+            try:
+                tanks = recv_tanks(client_socket)
+            except socket.error as e:
+                print(e)
+                break
+            for tank in tanks:
+                if tank.is_alive:
+                    tank_image = None
+                    if tank.colour == 'b':
+                        tank_image = tankBlueImage
+                    elif tank.colour == 'g':
+                        tank_image = tankGreenImage
+                    elif tank.colour == 'r':
+                        tank_image = tankRedImage
+                    elif tank.colour == 'p':
+                        tank_image = tankPinkImage
+                    elif tank.colour == 'y':
+                        tank_image = tankYellowImage
+                    print(tank.position)
+                    rotated_image = pygame.transform.rotate(tank_image, tank.turnover_deg + 270)
+                    rotated_rect = rotated_image.get_rect(center=(tank.position.x,tank.position.y))
+                    screen.blit(rotated_image, rotated_rect.topleft)
+                   # for bullet in tank.bullets:
+                    #    if bullet.is_alive:
+                     #       bullet.draw(screen)
+
             keys = pygame.key.get_pressed()
             if keys[pygame.K_LEFT]:
-                #rect_angle += 5
                 client_socket.send(b'L')
             if keys[pygame.K_RIGHT]:
-                #rect_angle -= 5
                 client_socket.send(b'R')
 
             if keys[pygame.K_UP]:
-                #new_x = image_rect.x + rect_speed * math.cos(math.radians(rect_angle))
-                #new_y = image_rect.y - rect_speed * math.sin(math.radians(rect_angle))
-                #if 0 <= new_x <= screen_width - tank_width and 0 <= new_y <= screen_height - tank_height:
-                #   image_rect.x = new_x
-                #   image_rect.y = new_y
                 client_socket.send(b'U')
             if keys[pygame.K_DOWN]:
-                #new_x = image_rect.x - rect_speed * math.cos(math.radians(rect_angle))
-                #new_y = image_rect.y + rect_speed * math.sin(math.radians(rect_angle))
-                #if 0 <= new_x <= screen_width - tank_width and 0 <= new_y <= screen_height - tank_height:
-                #    image_rect.x = new_x
-                #    image_rect.y = new_y
                 client_socket.send(b'D')
             #screen.fill((168,168,168))
-            screen.blit(background_image, (0, 0))
-
-
-            rotated_image = pygame.transform.rotate(picked_image, rect_angle+270)
-            rotated_rect = rotated_image.get_rect(center=image_rect.center)
-            screen.blit(rotated_image, rotated_rect.topleft)
-
-            #for bullet in bullets[:]:
-            #    bullet.move()
-            #    bullet.draw(screen)
-            #   if bullet.x < 0 or bullet.x > screen_width or bullet.y < 0 or bullet.y > screen_height:
-            #       bullets.remove(bullet)
 
             # Obliczanie czasu spędzonego w grze
             elapsed_time = time.time() - start_time

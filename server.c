@@ -6,20 +6,25 @@
 #include <pthread.h>
 #include <time.h>
 #include <semaphore.h>
+#include <math.h>
 
-#define MAX_BULLETS 5
+#define _USE_MATH_DEFINES
+#define MAX_BULLETS 3
 #define MAX_PLAYERS 3
 #define BOARD_WIDTH 800
 #define BOARD_HEIGTH 600
+#define TANK_SPEED 5
+#define TANK_WIDTH 100
+#define TANK_HEIGHT 110
+#define TANK_PICK_WIDTH 170
+#define TANK_PICK_HEIGTH 150
+#define DELAY 100000
+#ifndef M_PI
+    #define M_PI 3.14159265358979323846
+#endif
+
 
 //ENUMS
-typedef enum{
-   BLUE = 'b',
-   RED = 'r',
-   GREEN = 'g',
-   YELLOW = 'y',
-   PINK = 'p'
-} Colour;
 
 
 //STRUCTS
@@ -31,14 +36,15 @@ typedef struct{
 typedef struct{
     Point position;
     short isExpired;
+    int direction;
 } Bullet;
 
 typedef struct{
     Point position;
     int turnover_deg;
-    Point bullets[5];
-    Colour colour;
+    char colour;
     short isAlive;
+    Bullet bullets[MAX_BULLETS];
 } Tank;
 
 typedef struct{
@@ -61,11 +67,10 @@ typedef struct{
 } Client;
 
 //HELPER FUNCTIONS
-void init_tank(Tank* tank, Colour color,float x, float y);
-void append_player_tank(int player_id, Game* game, Colour color,float x, float y);
+void init_tank(Tank* tank, char color,float x, float y);
+void append_player_tank(int player_id, Game* game, char color,float x, float y);
 Point random_position();
 void delete_player_tank(int palyer_id, Game* game);
-
 void init_game(Game* game){
     if(sem_init(&game->game_semaphore,0,1) != 0){
         perror("Game sempahore initialization failed\n");
@@ -86,7 +91,7 @@ Point random_position(){
     return point;
 }
 
-void init_tank(Tank* tank, Colour color,float x, float y){
+void init_tank(Tank* tank,char color,float x, float y){
     tank->turnover_deg = 0;
     tank->position.x = x;
     tank->position.y = y;
@@ -94,7 +99,7 @@ void init_tank(Tank* tank, Colour color,float x, float y){
     tank->isAlive = 1;
 }
 
-void append_player_tank(int player_id, Game* game, Colour color,float x, float y){
+void append_player_tank(int player_id, Game* game, char color,float x, float y){
     sem_wait(&game->game_semaphore);
     init_tank(&game->tanks[player_id], color, x, y);
     sem_post(&game->game_semaphore);
@@ -117,12 +122,13 @@ int active_players = 0;
 
 //MAIN LOGIC FUNCTIONS
 void make_move(int client_id, char move, Game* game);
-void client_handler(void* args){
+void update_tank(Tank* tank, char move);
+void* client_handler(void* args){
     Incoming_client_info client_info = *((Incoming_client_info*) args);
     int client_id = client_info.client_id;
     Game* game = client_info.game;
     Client client;
-    char* buffer[1];
+    char buffer[1];
     Point position = random_position();
 
     sem_wait(&client_semaphore);
@@ -130,12 +136,13 @@ void client_handler(void* args){
     sem_post(&client_semaphore);
     
     recv(client.socket_fd, buffer, 1, 0);
+    printf("New player add with colour of %c\n", buffer[0]);
     append_player_tank(client_id, game, buffer[0],position.x, position.y);
-    pritnf("New player add with colour of %c", buffer[0]);
     memset(buffer, 0, 1);
 
     while(1){
         int bytes_recived = recv(client.socket_fd, buffer, 1, 0);
+        printf("Move %c", buffer[0]);
         if(bytes_recived <= 0){
             delete_player_tank(client_id, game);
             sem_wait(&client_semaphore);
@@ -145,13 +152,34 @@ void client_handler(void* args){
             sem_post(&client_semaphore);
             pthread_exit(NULL);
         }
-
+        make_move(client_id, buffer[0], game);
+        memset(buffer, 0, 1);
     }
 
 }
 
-void game_handler(void* args){
+void* game_handler(void* args){
+    Game* game = (Game*)args;
+    while(1){
+        printf("xdsdd%d\n", (int)sizeof(game->tanks));
+        sem_wait(&client_semaphore);
+        sem_wait(&game->game_semaphore);
+        for(int i = 0; i < MAX_PLAYERS; i++){
+            if(clients[i].is_active){
+                send(clients[i].socket_fd, game->tanks, sizeof(game->tanks), 0);
+            }
+        }
+        sem_post(&client_semaphore);
+        sem_post(&game->game_semaphore);
+        /*sem_wait(&game->game_semaphore);
+        for(int i = 0; i < MAX_PLAYERS; i++){
+            if(game->tanks[i].isAlive){
 
+            }
+        }
+        */
+       usleep(DELAY);
+    }
 }
 
 void make_move(int client_id, char move, Game* game){
@@ -161,7 +189,30 @@ void make_move(int client_id, char move, Game* game){
 }
 
 void update_tank(Tank* tank, char move){
-    switch move
+    float new_x, new_y;
+    switch(move){
+        case 'L':
+            tank->turnover_deg += 5;
+            break;
+        case 'R':
+            tank->turnover_deg -= 5;
+            break;
+        case 'U':
+            new_x = tank->position.x + TANK_SPEED * cos(tank->turnover_deg * M_PI /180);
+            new_y = tank->position.y - TANK_SPEED * sin(tank->turnover_deg * M_PI /180);
+            if(0 <= new_x <= BOARD_WIDTH - TANK_WIDTH && 0 <= new_y <= BOARD_HEIGTH - TANK_HEIGHT){
+                tank->position.x = new_x;
+                tank->position.y = new_y;
+            }
+            break;
+        case 'D':
+            new_x = tank->position.x - TANK_SPEED * cos(tank->turnover_deg * M_PI /180);
+            new_y = tank->position.y + TANK_SPEED * sin(tank->turnover_deg * M_PI /180);
+            if(0 <= new_x <= BOARD_WIDTH - TANK_WIDTH && 0 <= new_y <= BOARD_HEIGTH - TANK_HEIGHT){
+                tank->position.x = new_x;
+                tank->position.y = new_y;
+            }
+    }
 }
 
 
@@ -199,7 +250,11 @@ int main(){
         clients[i].is_active = 0;    
     }
 
-
+    pthread_t game_thread;
+    if(pthread_create(&game_thread, NULL, game_handler, &game) != 0){
+        perror("Error initializing game thread");
+        exit(EXIT_FAILURE);
+    }
 
     if (listen(server_scoket_fd, MAX_PLAYERS) == -1) {
         perror("Error listening on socket");
@@ -231,7 +286,7 @@ int main(){
                     break;  
                 }
             }
-            Incoming_client_info* args = malloc(sizeof(Incoming_client_info));
+            Incoming_client_info* args =(Incoming_client_info*) malloc(sizeof(Incoming_client_info));
             args->client_id = client_id;
             args->game = &game;
             pthread_t client_thread;
@@ -247,7 +302,7 @@ int main(){
         }else{
             char* connection_refused_info = "Connection refused - maxiimum number of active players reached";
             //send(incoming_socket_fd, connection_refused_info, strlen(connection_refused_info), 0);
-            printf("%s", connection_refused_info);
+            printf("%s\n", connection_refused_info);
             close(incoming_socket_fd);
         }
     }
