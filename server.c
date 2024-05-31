@@ -31,7 +31,7 @@ typedef struct{
 typedef struct{
     Point position;
     short isExpired;
-}Bullet;
+} Bullet;
 
 typedef struct{
     Point position;
@@ -116,6 +116,7 @@ int active_players = 0;
 
 
 //MAIN LOGIC FUNCTIONS
+void make_move(int client_id, char move, Game* game);
 void client_handler(void* args){
     Incoming_client_info client_info = *((Incoming_client_info*) args);
     int client_id = client_info.client_id;
@@ -133,8 +134,6 @@ void client_handler(void* args){
     pritnf("New player add with colour of %c", buffer[0]);
     memset(buffer, 0, 1);
 
-    float data[2] = {position.x, position.y};
-    send(client.socket_fd, data, sizeof(data), 0);
     while(1){
         int bytes_recived = recv(client.socket_fd, buffer, 1, 0);
         if(bytes_recived <= 0){
@@ -155,6 +154,15 @@ void game_handler(void* args){
 
 }
 
+void make_move(int client_id, char move, Game* game){
+    sem_wait(&game->game_semaphore);
+    update_tank(&game->tanks[client_id], move);
+    sem_post(&game->game_semaphore);
+}
+
+void update_tank(Tank* tank, char move){
+    switch move
+}
 
 
 int main(){

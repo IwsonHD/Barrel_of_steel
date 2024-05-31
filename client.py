@@ -3,6 +3,7 @@ import sys
 import math
 import time
 import socket
+import struct
 
 class Bullet:
     def __init__(self, x, y, angle):
@@ -77,10 +78,10 @@ def main():
     score = 0
 
     server_address = ('127.0.0.1', 5001)
-    socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     try:
-        socket.connect(server_address)
+        client_socket.connect(server_address)
         print("Connected to server.")
     except socket.error as e:
         print("Error connecting to server:", e)
@@ -90,6 +91,7 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+
             #if event.type == pygame.KEYDOWN and start:
             #   if event.key == pygame.K_SPACE:
             #        bullet_x = image_rect.centerx + (image_rect.width // 2) * math.cos(math.radians(rect_angle))
@@ -100,9 +102,14 @@ def main():
                     if event.key == pygame.K_RETURN:
                         picked_image = pick_images[pick]
                         picked_image = pygame.transform.scale(picked_image, (tank_width, tank_height))
+                        picked_colour = pick_colours[pick]
                         start = True
                         start_time = time.time()
-
+                        try:
+                            client_socket.send(color.encode('utf-8'))
+                            data = socket.recv(8)
+                        except socket.error as e:
+                            print(e)
 
 
                     if event.key == pygame.K_RIGHT:
@@ -126,10 +133,10 @@ def main():
             keys = pygame.key.get_pressed()
             if keys[pygame.K_LEFT]:
                 #rect_angle += 5
-                socket.send(b'L')
+                client_socket.send(b'L')
             if keys[pygame.K_RIGHT]:
                 #rect_angle -= 5
-                socket.send(b'R')
+                client_socket.send(b'R')
 
             if keys[pygame.K_UP]:
                 #new_x = image_rect.x + rect_speed * math.cos(math.radians(rect_angle))
@@ -137,14 +144,14 @@ def main():
                 #if 0 <= new_x <= screen_width - tank_width and 0 <= new_y <= screen_height - tank_height:
                 #   image_rect.x = new_x
                 #   image_rect.y = new_y
-                socket.send(b'U')
+                client_socket.send(b'U')
             if keys[pygame.K_DOWN]:
                 #new_x = image_rect.x - rect_speed * math.cos(math.radians(rect_angle))
                 #new_y = image_rect.y + rect_speed * math.sin(math.radians(rect_angle))
                 #if 0 <= new_x <= screen_width - tank_width and 0 <= new_y <= screen_height - tank_height:
                 #    image_rect.x = new_x
                 #    image_rect.y = new_y
-                socket.send(b'D')
+                client_socket.send(b'D')
             #screen.fill((168,168,168))
             screen.blit(background_image, (0, 0))
 
