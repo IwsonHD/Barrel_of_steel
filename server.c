@@ -18,6 +18,7 @@
 #define TANK_HEIGHT 110
 #define TANK_PICK_WIDTH 170
 #define TANK_PICK_HEIGTH 150
+#define BULLET_SPEED 10
 #define DELAY 100000
 #ifndef M_PI
     #define M_PI 3.14159265358979323846
@@ -35,7 +36,7 @@ typedef struct{
 
 typedef struct{
     Point position;
-    short isExpired;
+    short isAlive;
     int direction;
 } Bullet;
 
@@ -67,6 +68,7 @@ typedef struct{
 } Client;
 
 //HELPER FUNCTIONS
+int count_bullets(const Tank* tank);
 void init_tank(Tank* tank, char color,float x, float y);
 void append_player_tank(int player_id, Game* game, char color,float x, float y);
 Point random_position();
@@ -89,6 +91,13 @@ Point random_position(){
     point.x = (float)rand() / ((float)RAND_MAX / ((float)BOARD_WIDTH));
     point.y = (float)rand() / ((float)RAND_MAX / ((float)BOARD_HEIGTH));
     return point;
+}
+int count_bullets(const Tank* tank){
+    int out = 0;
+    for(int i = 0; i < MAX_BULLETS; i++){
+        if(tank->bullets->isAlive) out++;
+    }
+    return out;
 }
 
 void init_tank(Tank* tank,char color,float x, float y){
@@ -123,6 +132,8 @@ int active_players = 0;
 //MAIN LOGIC FUNCTIONS
 void make_move(int client_id, char move, Game* game);
 void update_tank(Tank* tank, char move);
+void update_bullets(Game* game);
+void check_bullet_hits(Game* game);
 void* client_handler(void* args){
     Incoming_client_info client_info = *((Incoming_client_info*) args);
     int client_id = client_info.client_id;
@@ -161,7 +172,7 @@ void* client_handler(void* args){
 void* game_handler(void* args){
     Game* game = (Game*)args;
     while(1){
-        printf("xdsdd%d\n", (int)sizeof(game->tanks));
+        //printf("xdsdd%d\n", (int)sizeof(game->tanks));
         sem_wait(&client_semaphore);
         sem_wait(&game->game_semaphore);
         for(int i = 0; i < MAX_PLAYERS; i++){
@@ -170,18 +181,28 @@ void* game_handler(void* args){
             }
         }
         sem_post(&client_semaphore);
+        //update bullet position and check for colission;
+        update_bullets(game);
         sem_post(&game->game_semaphore);
-        /*sem_wait(&game->game_semaphore);
-        for(int i = 0; i < MAX_PLAYERS; i++){
-            if(game->tanks[i].isAlive){
-
-            }
-        }
-        */
        usleep(DELAY);
     }
 }
 
+void update_bullets(Game* game){
+    for(int i = 0; i < MAX_PLAYERS; i++){
+        if(!game->tanks[i].isAlive) continue;
+        for(int j = 0; j < MAX_BULLETS; j++){
+            if(!game->tanks[i].bullets[j].isAlive) continue;
+                game->tanks[i].bullets[j].position.x += BULLET_SPEED * cos(game->tanks[i].bullets[j].direction * M_PI /180);
+                game->tanks[i].bullets[j].position.y -= BULLET_SPEED * sin(game->tanks[i].bullets[j].direction * M_PI /180);
+            if(0 >= game->tanks[i].bullets[j].position.x || game->tanks[i].bullets[j].position.x >= BOARD_WIDTH ||
+            0 >= game->tanks[i].bullets[j].position.y || game->tanks[i].bullets[j].position.x >= BOARD_HEIGTH){
+                game->tanks[i].bullets[j].isAlive = 0;
+            }
+            puts("xd");
+        }
+    }
+}
 void make_move(int client_id, char move, Game* game){
     sem_wait(&game->game_semaphore);
     update_tank(&game->tanks[client_id], move);
@@ -212,6 +233,18 @@ void update_tank(Tank* tank, char move){
                 tank->position.x = new_x;
                 tank->position.y = new_y;
             }
+            break;
+        case 'S':
+            for(int i = 0; i < MAX_BULLETS; i++){
+                if(!tank->bullets[i].isAlive){
+                    tank->bullets[i].position.x = tank->position.x + (TANK_WIDTH/2) * cos(tank->turnover_deg * M_PI /180);
+                    tank->bullets[i].position.y = tank->position.y - (TANK_WIDTH/2) * sin(tank->turnover_deg * M_PI /180);
+                    tank->bullets[i].direction = tank->turnover_deg;
+                    tank->bullets[i].isAlive = 1; 
+                    break;
+                }
+            }
+            break;
     }
 }
 

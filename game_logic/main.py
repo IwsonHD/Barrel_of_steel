@@ -21,7 +21,7 @@ background_color = (50, 67, 98)
 gradient_color = (0, 17, 48)
 gradient_factor = 1.1
 
-background_image = pygame.image.load('background.png')
+background_image = pygame.image.load('./background.png')
 background_image = pygame.transform.scale(background_image, (screen_width, screen_height))
 tankImage = pygame.image.load('tank_pink.png')
 logoImage = pygame.image.load('logo.png')
@@ -150,7 +150,7 @@ while running:
         score_string = f"Score: {score:04}"
 
         #font = pygame.font.SysFont(None, 36)
-        font = pygame.font.Font("ka1.ttf", 20)
+        font = pygame.font.Font("../ka1.ttf", 20)
         time_text = font.render(time_string, True, (0, 0, 0))
         score_text = font.render(score_string, True, (0, 0, 0))
         screen.blit(time_text, (10, 10))

@@ -6,7 +6,7 @@ import socket
 import struct
 
 MAX_PLAYERS = 3
-MAX_BULLETS = 5
+MAX_BULLETS = 3
 
 class Point:
     def __init__(self, x, y):
@@ -14,10 +14,10 @@ class Point:
         self.y = y
 
 class Tank:
-    def __init__(self, position, turnover_deg, bullets, colour, is_alive):
+    def __init__(self, position, turnover_deg, colour, is_alive):
         self.position = position
         self.turnover_deg = turnover_deg
-        self.bullets = bullets
+        #self.bullets = bullets
         self.colour = colour
         self.is_alive = is_alive
 
@@ -33,19 +33,22 @@ class Bullet:
 
 
 def recv_tanks(client_sock):
-    tanks_data = client_sock.recv(MAX_PLAYERS * struct.calcsize('2f i c h 2f h i 2f h i 2f h i'))
+    tanks_data = client_sock.recv(MAX_PLAYERS * struct.calcsize('2f i c h' + MAX_BULLETS*' 2f h i'))
     tanks = []
+    bullets_out = []
     for i in range(MAX_PLAYERS):
-        offset = i * struct.calcsize('2f i c h 2f h i 2f h i 2f h i')
-        data = tanks_data[offset:offset + struct.calcsize('2f i c h 2f h i 2f h i 2f h i')]
-        position_x, position_y, turnover_deg, colour, is_alive, *bullets = struct.unpack('2f i c h 2f h i 2f h i 2f h i', data)
+        offset = i * struct.calcsize('2f i c h' + MAX_BULLETS*' 2f h i')
+        data = tanks_data[offset:offset + struct.calcsize('2f i c h' + MAX_BULLETS*' 2f h i')]
+        position_x, position_y, turnover_deg, colour, is_alive, *bullets = struct.unpack('2f i c h' + MAX_BULLETS*' 2f h i', data)
         if is_alive == 1:
             position = Point(position_x, position_y)
-            bullet_positions = [Point(0,0) for i in range(MAX_BULLETS)]
+            #bullet_positions = [Point(0,0) for i in range(MAX_BULLETS)]
+            bullets_sub = [Bullet(Point(bullets[j*4], bullets[j*4 + 1]), bullets[j*4 + 3], bullets[j*4 + 2]) for j in range(MAX_BULLETS)]
             #bullet_positions = [Point(bullets[i*2], bullets[i*2+1]) for i in range(MAX_BULLETS)]
-            tank = Tank(position, turnover_deg, bullet_positions, colour.decode('utf-8'), is_alive)
+            tank = Tank(position, turnover_deg, colour.decode('utf-8'), is_alive)
             tanks.append(tank)
-    return tanks
+            bullets_out += bullets_sub
+    return tanks, bullets_out
 
 
 def main():
@@ -152,7 +155,7 @@ def main():
         else:
             screen.blit(background_image, (0, 0))
             try:
-                tanks = recv_tanks(client_socket)
+                tanks, bullets = recv_tanks(client_socket)
             except socket.error as e:
                 print(e)
                 break
@@ -173,9 +176,9 @@ def main():
                     rotated_image = pygame.transform.rotate(tank_image, tank.turnover_deg + 270)
                     rotated_rect = rotated_image.get_rect(center=(tank.position.x,tank.position.y))
                     screen.blit(rotated_image, rotated_rect.topleft)
-                   # for bullet in tank.bullets:
-                    #    if bullet.is_alive:
-                     #       bullet.draw(screen)
+                    for bullet in bullets:
+                        if bullet.is_alive:
+                           bullet.draw(screen)
 
             keys = pygame.key.get_pressed()
             if keys[pygame.K_LEFT]:
@@ -187,6 +190,8 @@ def main():
                 client_socket.send(b'U')
             if keys[pygame.K_DOWN]:
                 client_socket.send(b'D')
+            if keys[pygame.K_SPACE]:
+                client_socket.send(b'S')
             #screen.fill((168,168,168))
 
             # Obliczanie czasu spędzonego w grze
