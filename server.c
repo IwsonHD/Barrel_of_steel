@@ -24,7 +24,7 @@
     #define M_PI 3.14159265358979323846
 #endif
 
-
+ 
 //ENUMS
 
 
@@ -67,10 +67,85 @@ typedef struct{
     short is_active;
 } Client;
 
+Point rotate_and_translate(Point point, float angle, Point center) {
+    float rad = angle * (M_PI / 180.0f);
+    float cosine = cos(rad);
+    float sine = sin(rad);
+    Point rotated = {
+        .x = point.x * cosine - point.y * sine,
+        .y = point.x * sine + point.y * cosine
+    };
+    Point translated = {
+        .x = rotated.x + center.x,
+        .y = rotated.y + center.y
+    };
+    return translated;
+}
+
+void calculate_corners(Point* corners, Point center, float width, float height, float angle) {
+    Point half_size = { .x = width / 2 + 10, .y = height / 2 + 20 };
+    Point offsets[4] = {
+        { .x = -half_size.y, .y = -half_size.x },
+        { .x = half_size.y, .y = -half_size.x },
+        { .x = -half_size.y, .y = half_size.x },
+        { .x = half_size.y, .y = half_size.x }
+    };
+    for (int i = 0; i < 4; i++) {
+        corners[i] = rotate_and_translate(offsets[i], angle, center);
+    }
+}
+
+int point_in_polygon(Point point, Point* polygon, int num_vertices) {
+    int i, j, c = 0;
+    for (i = 0, j = num_vertices-1; i < num_vertices; j = i++) {
+        if (((polygon[i].y > point.y) != (polygon[j].y > point.y)) &&
+            (point.x < (polygon[j].x - polygon[i].x) * (point.y - polygon[i].y) / (polygon[j].y - polygon[i].y) + polygon[i].x))
+            c = !c;
+    }
+    return c;
+}
+
+int bullet_intersects_with_corners(Bullet* bullet, Point* corners) {
+    return point_in_polygon(bullet->position, corners, 4);
+}
+
+void check_bullet_hits(Game* game){
+    for(int i = 0; i < MAX_PLAYERS; i++){
+        if(!game->tanks[i].isAlive) continue;
+        for(int j = 0; j < MAX_BULLETS; j++){
+            if(!game->tanks[i].bullets[j].isAlive) continue;
+            for(int k = 0; k < MAX_PLAYERS; k++){
+                if(!game->tanks[k].isAlive) continue;
+                if(i == k) continue;     
+
+                Point center_position;
+                center_position.x = game->tanks[k].position.x;
+                center_position.y = game->tanks[k].position.y;
+
+                Point corners[4];
+                calculate_corners(corners, center_position, TANK_WIDTH, TANK_HEIGHT, game->tanks[k].turnover_deg);
+
+                printf("Tank x: %f, y: %f \n", game->tanks[k].position.x, game->tanks[k].position.y);
+                printf("Bullet x: %f, y: %f \n", game->tanks[i].bullets[j].position.x, game->tanks[i].bullets[j].position.y);
+                
+                for(int l = 0; l < 4; l++)
+                    printf("Corner %d: x: %f, y: %f\n", l, corners[l].x, corners[l].y);
+
+                if(bullet_intersects_with_corners(&game->tanks[i].bullets[j], corners)){
+                    game->tanks[k].isAlive = 0;
+                    game->tanks[i].bullets[j].isAlive = 0;
+                    puts("Hit");
+                }
+            }
+        }
+    }
+}
+
+
 //HELPER FUNCTIONS
 int count_bullets(const Tank* tank);
-void init_tank(Tank* tank, char color,float x, float y);
-void append_player_tank(int player_id, Game* game, char color,float x, float y);
+void init_tank(Tank* tank, char color, float x, float y);
+void append_player_tank(int player_id, Game* game, char color, float x, float y);
 Point random_position();
 void delete_player_tank(int palyer_id, Game* game);
 void init_game(Game* game){
@@ -92,6 +167,7 @@ Point random_position(){
     point.y = (float)rand() / ((float)RAND_MAX / ((float)BOARD_HEIGTH));
     return point;
 }
+
 int count_bullets(const Tank* tank){
     int out = 0;
     for(int i = 0; i < MAX_BULLETS; i++){
@@ -100,7 +176,7 @@ int count_bullets(const Tank* tank){
     return out;
 }
 
-void init_tank(Tank* tank,char color,float x, float y){
+void init_tank(Tank* tank, char color, float x, float y){
     tank->turnover_deg = 0;
     tank->position.x = x;
     tank->position.y = y;
@@ -108,7 +184,7 @@ void init_tank(Tank* tank,char color,float x, float y){
     tank->isAlive = 1;
 }
 
-void append_player_tank(int player_id, Game* game, char color,float x, float y){
+void append_player_tank(int player_id, Game* game, char color, float x, float y){
     sem_wait(&game->game_semaphore);
     init_tank(&game->tanks[player_id], color, x, y);
     sem_post(&game->game_semaphore);
@@ -148,12 +224,12 @@ void* client_handler(void* args){
     
     recv(client.socket_fd, buffer, 1, 0);
     printf("New player add with colour of %c\n", buffer[0]);
-    append_player_tank(client_id, game, buffer[0],position.x, position.y);
+    append_player_tank(client_id, game, buffer[0], position.x, position.y);
     memset(buffer, 0, 1);
 
     while(1){
         int bytes_recived = recv(client.socket_fd, buffer, 1, 0);
-        printf("Move %c", buffer[0]);
+        // printf("Move %c", buffer[0]);
         if(bytes_recived <= 0){
             delete_player_tank(client_id, game);
             sem_wait(&client_semaphore);
@@ -183,6 +259,7 @@ void* game_handler(void* args){
         sem_post(&client_semaphore);
         //update bullet position and check for colission;
         update_bullets(game);
+        check_bullet_hits(game);
         sem_post(&game->game_semaphore);
        usleep(DELAY);
     }
@@ -199,10 +276,10 @@ void update_bullets(Game* game){
             0 >= game->tanks[i].bullets[j].position.y || game->tanks[i].bullets[j].position.x >= BOARD_HEIGTH){
                 game->tanks[i].bullets[j].isAlive = 0;
             }
-            puts("xd");
-        }
+        }   
     }
 }
+
 void make_move(int client_id, char move, Game* game){
     sem_wait(&game->game_semaphore);
     update_tank(&game->tanks[client_id], move);
