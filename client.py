@@ -106,7 +106,7 @@ def main():
     start_time = None
     score = 0
 
-    server_address = ('192.168.0.220', 6000)
+    server_address = ('127.0.0.1', 5001)
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     try:

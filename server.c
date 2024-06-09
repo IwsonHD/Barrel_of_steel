@@ -345,8 +345,8 @@ int main(){
 
     struct sockaddr_in server_address;
     server_address.sin_family = AF_INET;
-    server_address.sin_addr.s_addr = INADDR_ANY;
-    server_address.sin_port = htons(6000);
+    server_address.sin_addr.s_addr = inet_addr("127.0.0.1");
+    server_address.sin_port = htons(5001);
 
     if (bind(server_scoket_fd, (struct sockaddr*)&server_address, sizeof(server_address)) == -1) {
         perror("Error binding address to socket");
