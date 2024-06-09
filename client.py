@@ -106,7 +106,7 @@ def main():
     start_time = None
     score = 0
 
-    server_address = ('127.0.0.1', 5001)
+    server_address = ('192.168.0.220', 6000)
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     try:
@@ -172,7 +172,7 @@ def main():
                         tank_image = tankPinkImage
                     elif tank.colour == 'y':
                         tank_image = tankYellowImage
-                    print(tank.position)
+                    # print(tank.position)
                     rotated_image = pygame.transform.rotate(tank_image, tank.turnover_deg + 270)
                     rotated_rect = rotated_image.get_rect(center=(tank.position.x,tank.position.y))
                     screen.blit(rotated_image, rotated_rect.topleft)
@@ -200,14 +200,14 @@ def main():
             elapsed_seconds = int(elapsed_time % 60)
             time_string = f"Time: {elapsed_minutes:02}:{elapsed_seconds:02}"
 
-            score_string = f"Score: {score:04}"
+           # score_string = f"Score: {score:04}"
 
             #font = pygame.font.SysFont(None, 36)
             font = pygame.font.Font("ka1.ttf", 20)
             time_text = font.render(time_string, True, (0, 0, 0))
-            score_text = font.render(score_string, True, (0, 0, 0))
+           # score_text = font.render(score_string, True, (0, 0, 0))
             screen.blit(time_text, (10, 10))
-            screen.blit(score_text, (screen_width-190, 10))
+            # screen.blit(score_text, (screen_width-190, 10))
 
         pygame.display.flip()
 
